@@ -1,0 +1,19 @@
+team_name: "Your Team Name Here"
+team_members:
+  - name: "Member 1 Name"
+    email: "member1@example.com"
+  - name: "Member 2 Name"
+    email: "member2@example.com"
+
+# Hardware the indexes were built on (for reproducibility context)
+build_environment:
+  os: "macOS / Linux / Windows"
+  ram_gb: 16
+  cpu_cores: 8
+
+# Sandbox execution limits
+execution_constraints:
+  max_runtime_minutes: 5
+  max_ram_gb: 16
+  gpu_used: false
+  network_used_during_ranking: false

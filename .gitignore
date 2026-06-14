@@ -1,0 +1,10 @@
+.venv/
+models/
+embeddings.npy
+bm25_index.pkl
+__pycache__/
+*.pyc
+.DS_Store
+candidates.jsonl
+candidates.jsonl.gz
+submission.csv
