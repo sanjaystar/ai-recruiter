@@ -1,15 +1,20 @@
 """
 behavior_score.py
 Evaluates candidate behavior by fully utilizing all 23 available redrob_signals.
-Strictly splitting between Platform Engagement/Market Demand and 
-Recruitability/Conversion Probability to maximize methodology coherence.
+Strictly splitting between Platform Engagement/Market Demand,
+Recruitability/Conversion Probability, and Location/Logistics fit
+to maximize methodology coherence.
 """
 
 from datetime import datetime
-from .schema_analyzer import get_redrob_signals, safe_float
+from .schema_analyzer import get_profile, get_redrob_signals, safe_float, safe_str
 
 # Assume a static reference date for deterministic scoring in the hackathon dataset
 REFERENCE_DATE = datetime(2024, 6, 1)
+
+# JD specifies Pune/Noida with openness to Tier-1 Indian cities
+PREFERRED_LOCATIONS = {"pune", "noida"}
+GOOD_LOCATIONS = {"hyderabad", "mumbai", "bangalore", "bengaluru", "delhi", "gurgaon", "gurugram", "chennai", "ncr", "new delhi"}
 
 def _calculate_days_ago(date_str: str) -> float:
     if not date_str:
@@ -24,14 +29,16 @@ def _calculate_days_ago(date_str: str) -> float:
 def calculate_behavior_score(candidate: dict, jd_data: dict = None) -> float:
     """
     Computes behavior score.
-    Engagement max points: 40
-    Recruitability max points: 60
+    Engagement max points: 35
+    Recruitability max points: 55
+    Location & Logistics max points: 10
     Total Max: 100
     """
+    profile = get_profile(candidate)
     signals = get_redrob_signals(candidate)
     
     # ==========================================
-    # 1. Platform Engagement & Market Demand (Max 40 points)
+    # 1. Platform Engagement & Market Demand (Max 35 points)
     # ==========================================
     github = safe_float(signals.get("github_activity_score", -1.0))
     completeness = safe_float(signals.get("profile_completeness_score", 0.0))
@@ -48,11 +55,11 @@ def calculate_behavior_score(candidate: dict, jd_data: dict = None) -> float:
     
     engagement = 0.0
     
-    # GitHub Activity (Max 8)
+    # GitHub Activity (Max 7)
     if github >= 0:
-        engagement += (github / 100.0) * 8.0
+        engagement += (github / 100.0) * 7.0
     else:
-        engagement += 3.0 
+        engagement += 2.5 
         
     # Profile Completeness (Max 4)
     engagement += (completeness / 100.0) * 4.0
@@ -62,28 +69,28 @@ def calculate_behavior_score(candidate: dict, jd_data: dict = None) -> float:
     if ver_phone: engagement += 1.0
     if linkedin: engagement += 1.0
     
-    # Last Active Decay Curve (Max 10)
+    # Last Active Decay Curve (Max 8)
     days_ago = _calculate_days_ago(last_active_str)
     if days_ago <= 7:
-        engagement += 10.0
+        engagement += 8.0
     elif days_ago <= 30:
-        engagement += 7.0
+        engagement += 6.0
     elif days_ago <= 90:
         engagement += 3.0
     else:
         engagement += max(0.0, 3.0 - ((days_ago - 90) / 30.0))
         
-    # Market Demand (Max 15)
+    # Market Demand (Max 13)
     market_pts = 0.0
-    market_pts += min(saved_30d * 2.0, 8.0) 
-    market_pts += min(views_30d * 0.2, 4.0) 
-    market_pts += min(search_30d * 0.05, 2.0)
+    market_pts += min(saved_30d * 2.0, 7.0) 
+    market_pts += min(views_30d * 0.2, 3.5) 
+    market_pts += min(search_30d * 0.05, 1.5)
     market_pts += min(conn_count * 0.01, 1.0)
     
-    engagement += min(market_pts, 15.0)
+    engagement += min(market_pts, 13.0)
         
     # ==========================================
-    # 2. Recruitability Score (Max 60 points)
+    # 2. Recruitability Score (Max 55 points)
     # ==========================================
     resp_rate = safe_float(signals.get("recruiter_response_rate", 0.0))
     avg_resp_hrs = safe_float(signals.get("avg_response_time_hours", -1.0))
@@ -102,8 +109,8 @@ def calculate_behavior_score(candidate: dict, jd_data: dict = None) -> float:
         
     recruitability = 0.0
     
-    # Recruiter Response Rate (Max 15)
-    recruitability += resp_rate * 15.0
+    # Recruiter Response Rate (Max 14)
+    recruitability += resp_rate * 14.0
     
     # Average Response Time (Max 5)
     if avg_resp_hrs >= 0:
@@ -114,14 +121,14 @@ def calculate_behavior_score(candidate: dict, jd_data: dict = None) -> float:
     else:
         recruitability += 2.0 
     
-    # Interview Completion Rate (Max 12)
-    recruitability += interview_rate * 12.0
+    # Interview Completion Rate (Max 10)
+    recruitability += interview_rate * 10.0
     
-    # Offer Acceptance Rate (Max 10)
+    # Offer Acceptance Rate (Max 8)
     if offer_rate >= 0:
-        recruitability += offer_rate * 10.0
+        recruitability += offer_rate * 8.0
     else:
-        recruitability += 4.0 
+        recruitability += 3.0 
         
     # Explicit Intent Signal (Max 5)
     if open_flag:
@@ -147,5 +154,43 @@ def calculate_behavior_score(candidate: dict, jd_data: dict = None) -> float:
         elif cand_salary_min > jd_salary_budget:
             # Mildly penalize if candidate minimum is higher than budget
             recruitability *= 0.8
+    
+    # ==========================================
+    # 3. Location & Work-Mode Fit (Max 10 points)
+    # ==========================================
+    location_str = safe_str(profile.get("location", "")).lower()
+    country = safe_str(profile.get("country", "")).lower()
+    work_mode = safe_str(signals.get("preferred_work_mode", "")).lower()
+    relocate = signals.get("willing_to_relocate", False)
+    
+    location_score = 0.0
+    
+    # City Match (Max 4)
+    if any(city in location_str for city in PREFERRED_LOCATIONS):
+        location_score += 4.0  # Exact Pune/Noida match
+    elif any(city in location_str for city in GOOD_LOCATIONS):
+        if relocate:
+            location_score += 3.0  # Good city + willing to relocate
+        else:
+            location_score += 1.5  # Good city but won't relocate
+    elif "india" in country:
+        if relocate:
+            location_score += 2.0  # India-based + willing to relocate
+        else:
+            location_score += 0.5
+    # Outside India: 0 points (JD says no visa sponsorship)
+    
+    # Work Mode Compatibility (Max 3) — JD is hybrid
+    if work_mode in ("hybrid", "flexible"):
+        location_score += 3.0
+    elif work_mode == "onsite":
+        location_score += 2.0  # Onsite is compatible with hybrid
+    elif work_mode == "remote":
+        location_score += 0.5  # Remote-only is a mild concern for hybrid role
+    
+    # Relocation Willingness Bonus (Max 3)
+    if relocate:
+        location_score += 3.0
             
-    return min(100.0, max(0.0, engagement + recruitability))
+    return min(100.0, max(0.0, engagement + recruitability + location_score))
+

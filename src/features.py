@@ -14,6 +14,7 @@ class CandidateScore:
     behavior_score: float = 0.0
     career_score: float = 0.0
     trust_score: float = 0.0
+    jd_fit_penalty: float = 1.0
     is_honeypot: bool = False
     final_score: float = 0.0
     
@@ -26,6 +27,8 @@ class CandidateScore:
             "behavior_score": self.behavior_score,
             "career_score": self.career_score,
             "trust_score": self.trust_score,
+            "jd_fit_penalty": self.jd_fit_penalty,
             "is_honeypot": self.is_honeypot,
             "final_score": self.final_score
         }
+

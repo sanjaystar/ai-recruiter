@@ -1,13 +1,41 @@
-team_name: "Your Team Name Here"
+# Submission Metadata — Redrob Hackathon
+# Fill in all FILL_IN fields before submitting
+
+team_name: "FILL_IN"
+
+primary_contact:
+  name: ""
+  email: "FILL_IN"
+  phone: "FILL_IN"
+
 team_members:
-  - name: "Member 1 Name"
-    email: "member1@example.com"
-  - name: "Member 2 Name"
-    email: "member2@example.com"
+  - name: "FILL_IN"
+    email: "FILL_IN"
+  # Add more members as needed:
+  # - name: "Member 2"
+  #   email: "member2@example.com"
+
+github_repo_url: "FILL_IN"  # e.g., https://github.com/USERNAME/ai-recruiter
+sandbox_link: "FILL_IN"     # e.g., https://huggingface.co/spaces/USERNAME/ai-recruiter
+
+ai_tools_declared:
+  - "FILL_IN"  # Options: Claude / ChatGPT / Copilot / Cursor / Gemini / Other / None
+
+compute_environment_summary: "FILL_IN"  # e.g., "MacBook Pro M2, 16GB RAM, Python 3.11"
+
+methodology_summary: >
+  Hybrid semantic ranking system combining sparse TF-IDF retrieval (70%) with
+  dense sentence-transformer embeddings (30%) for candidate-JD matching. 
+  Candidates scored across 5 dimensions: skill taxonomy match with proficiency/assessment 
+  weighting, career trajectory with taxonomy-alias relevance detection, behavioral 
+  recruitability using all 23 Redrob signals including location/work-mode fit, 
+  trust/honeypot anomaly detection, and JD-specific fit penalties for consulting-only 
+  careers, title-chasers, and keyword stuffers. Architecture split into offline 
+  pre-computation (embeddings + indexes) and online ranking (< 5 seconds, CPU-only).
 
 # Hardware the indexes were built on (for reproducibility context)
 build_environment:
-  os: "macOS / Linux / Windows"
+  os: "FILL_IN"  # e.g., macOS / Linux / Windows
   ram_gb: 16
   cpu_cores: 8
 

@@ -1,6 +1,7 @@
 """
 ranker.py
-Applies dynamic weights to normalized features to produce the final top 100 ranking.
+Applies dynamic weights to normalized features, applies JD-fit penalties,
+and produces the final top 100 ranking.
 """
 
 import pandas as pd
@@ -10,7 +11,8 @@ from .honeypot import apply_honeypot_penalty
 def rank_candidates(df: pd.DataFrame, jd_weights: dict, top_n: int = 100) -> pd.DataFrame:
     """
     Takes a DataFrame of NORMALIZED scores (0-100), applies dynamic JD weights, 
-    applies honeypot penalties, and returns the top N candidates.
+    applies JD-fit penalty multiplier, applies honeypot penalties, 
+    and returns the top N candidates.
     Uses fully vectorized Pandas operations for maximum performance.
     """
     if df.empty:
@@ -32,7 +34,10 @@ def rank_candidates(df: pd.DataFrame, jd_weights: dict, top_n: int = 100) -> pd.
         (df["trust_score"] * w_trust)
     )
     
-    # 2. Apply Honeypot Penalties
+    # 2. Apply JD-Fit Penalty Multiplier (compounding penalties from jd_fit_penalty.py)
+    df["final_score"] = df["final_score"] * df["jd_fit_penalty"]
+    
+    # 3. Apply Honeypot Penalties
     # We use numpy.where to vectorize the boolean condition (orders of magnitude faster than df.apply)
     df["final_score"] = np.where(
         df["is_honeypot"] == True, 
@@ -40,7 +45,7 @@ def rank_candidates(df: pd.DataFrame, jd_weights: dict, top_n: int = 100) -> pd.
         df["final_score"]
     )
     
-    # 3. Sort and Slice
+    # 4. Sort and Slice
     # Tiebreaking requirement: if final scores tie, sort by skill_score descending, 
     # and finally deterministically by candidate_id ascending.
     df_sorted = df.sort_values(
@@ -50,7 +55,8 @@ def rank_candidates(df: pd.DataFrame, jd_weights: dict, top_n: int = 100) -> pd.
     
     top_candidates = df_sorted.head(top_n).copy()
     
-    # 4. Assign ranks (1 to N)
+    # 5. Assign ranks (1 to N)
     top_candidates["rank"] = range(1, len(top_candidates) + 1)
     
     return top_candidates
+

@@ -19,6 +19,7 @@ from src.skill_score import calculate_skill_score
 from src.career_score import calculate_career_score
 from src.behavior_score import calculate_behavior_score
 from src.trust_score import calculate_trust
+from src.jd_fit_penalty import calculate_jd_fit_penalty
 from src.hybrid_ranker import calculate_hybrid_relevance
 from src.ranker import rank_candidates
 from src.reasoning import generate_reasoning
@@ -85,6 +86,8 @@ def main():
     taxonomy_cache = {}
     features_list = []
     raw_cache = {}
+    penalty_reasons_cache = {}
+    trust_concerns_cache = {}
     
     stats = {"loaded": 0, "filtered": 0, "errors": {}}
     for count, candidate in enumerate(stream_candidates(candidates_path, stats)):
@@ -96,7 +99,8 @@ def main():
         d_score = hybrid_dict[cid]
         c_score = calculate_career_score(candidate, jd_data)
         b_score = calculate_behavior_score(candidate, jd_data)
-        t_score, is_honeypot = calculate_trust(candidate)
+        t_score, is_honeypot, trust_concerns = calculate_trust(candidate)
+        jd_penalty, penalty_reasons = calculate_jd_fit_penalty(candidate, jd_data)
         
         c_feat = CandidateScore(
             candidate_id=cid,
@@ -105,10 +109,13 @@ def main():
             behavior_score=b_score,
             career_score=c_score,
             trust_score=t_score,
+            jd_fit_penalty=jd_penalty,
             is_honeypot=is_honeypot
         )
         features_list.append(c_feat.to_dict())
         raw_cache[cid] = candidate
+        penalty_reasons_cache[cid] = penalty_reasons
+        trust_concerns_cache[cid] = trust_concerns
         
     if not features_list:
         print("CRITICAL ERROR: No candidates were parsed.")
@@ -128,7 +135,9 @@ def main():
         rank = row["rank"]
         final_score = row["final_score"]
         raw_cand = raw_cache.get(cid, {})
-        reasoning = generate_reasoning(raw_cand, rank, final_score)
+        p_reasons = penalty_reasons_cache.get(cid, [])
+        t_concerns = trust_concerns_cache.get(cid, [])
+        reasoning = generate_reasoning(raw_cand, rank, final_score, jd_data, p_reasons, t_concerns)
         reasonings.append(reasoning)
         
     top_100["reasoning"] = reasonings
@@ -144,3 +153,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -1,10 +1,11 @@
 """
 career_score.py
-Evaluates a candidate's career trajectory, calculating RELEVANT Years of Experience
-and title progression relative to the JD.
+Evaluates a candidate's career trajectory, calculating RELEVANT Years of Experience,
+title progression, stability, and education fit relative to the JD.
 """
 from datetime import datetime
-from .schema_analyzer import get_career_history, safe_str, safe_float
+from .schema_analyzer import get_career_history, get_education, safe_str, safe_float
+from .skill_taxonomy import TAXONOMY
 
 REFERENCE_DATE = datetime(2024, 6, 1)
 
@@ -16,6 +17,15 @@ TITLE_HIERARCHY = {
     "staff": 5, "principal": 5, "director": 5,
     "vp": 6, "vice president": 6, "head": 6,
     "c-level": 7, "cto": 7, "ceo": 7, "founder": 7
+}
+
+# Education fields relevant to AI/ML engineering
+RELEVANT_FIELDS = {
+    "computer science", "cs", "artificial intelligence", "ai",
+    "machine learning", "ml", "data science", "statistics",
+    "mathematics", "math", "applied mathematics", "computational",
+    "information technology", "it", "electrical engineering",
+    "electronics", "ece", "software engineering", "informatics"
 }
 
 def _get_title_level(title: str) -> int:
@@ -34,41 +44,92 @@ def _parse_date(date_str: str) -> datetime:
     except (ValueError, TypeError):
         return REFERENCE_DATE
 
-def _is_role_relevant(role_title: str, role_desc: str, jd_data: dict) -> bool:
+def _build_jd_alias_set(jd_data: dict) -> set:
     """
-    Determines if a career role is relevant to the JD by checking title and keywords.
+    Builds a flat set of all taxonomy aliases for the JD's required and preferred skills.
+    E.g., if required_skills contains 'RETRIEVAL', this returns
+    {'semantic search', 'information retrieval', 'rag', 'candidate search', ...}
+    """
+    alias_set = set()
+    
+    for domain_name in jd_data.get("required_skills", []):
+        if domain_name in TAXONOMY:
+            alias_set.update(TAXONOMY[domain_name])
+        else:
+            # If it's not a canonical domain name, treat it as a raw alias
+            alias_set.add(domain_name.lower())
+    
+    for domain_name in jd_data.get("preferred_skills", []):
+        if domain_name in TAXONOMY:
+            alias_set.update(TAXONOMY[domain_name])
+        else:
+            alias_set.add(domain_name.lower())
+    
+    return alias_set
+
+def _is_role_relevant(role_title: str, role_desc: str, jd_data: dict, jd_aliases: set) -> bool:
+    """
+    Determines if a career role is relevant to the JD by checking title and 
+    taxonomy alias keywords against the role text.
     """
     if not jd_data:
         return True # Fallback if no JD is passed
         
     role_text = f"{role_title} {role_desc}".lower()
     
-    # Check if target title matches
-    target_title = safe_str(jd_data.get("title", "")).lower()
-    if target_title and target_title in role_text:
-        return True
-        
-    # Check if any strong must-have skills are mentioned
-    for skill in jd_data.get("must_have_skills", []):
-        if skill.lower() in role_text:
+    # Check if any taxonomy alias appears in the role text
+    for alias in jd_aliases:
+        if len(alias) >= 3 and alias in role_text:
             return True
-            
-    for skill in jd_data.get("good_to_have_skills", []):
-        if skill.lower() in role_text:
+        elif len(alias) < 3 and f" {alias} " in f" {role_text} ":
+            # Short aliases (e.g., "go", "ml") require word-boundary matching
             return True
             
     return False
+
+def _calculate_education_score(candidate: dict) -> float:
+    """
+    Max 5 points for education relevance.
+    - Relevant field (CS/AI/ML/Math/Stats): +3
+    - Advanced degree (Masters/PhD): +2
+    """
+    education = get_education(candidate)
+    if not education:
+        return 0.0
+    
+    best_field_score = 0.0
+    best_degree_score = 0.0
+    
+    for edu in education:
+        field = safe_str(edu.get("field_of_study", "")).lower()
+        degree = safe_str(edu.get("degree", "")).lower()
+        
+        # Check field relevance
+        if any(rf in field for rf in RELEVANT_FIELDS):
+            best_field_score = 3.0
+        
+        # Check degree level
+        if "phd" in degree or "ph.d" in degree or "doctorate" in degree:
+            best_degree_score = max(best_degree_score, 2.0)
+        elif "master" in degree or "m.s" in degree or "m.tech" in degree or "mtech" in degree:
+            best_degree_score = max(best_degree_score, 2.0)
+    
+    return best_field_score + best_degree_score
 
 def calculate_career_score(candidate: dict, jd_data: dict = None) -> float:
     """
     Max points: 100
     - Relevant Years of Experience: 50
-    - Title Progression (Velocity): 30
+    - Title Progression (Velocity): 25
     - Stability (Tenure): 20
+    - Education Fit: 5
     """
     career = get_career_history(candidate)
     if not career:
-        return 0.0
+        return _calculate_education_score(candidate)
+    
+    # Build the alias set once per call (cached upstream via jd_data)
+    jd_aliases = _build_jd_alias_set(jd_data) if jd_data else set()
         
     relevant_months = 0
     total_months = 0
@@ -93,7 +154,7 @@ def calculate_career_score(candidate: dict, jd_data: dict = None) -> float:
         total_months += months
         
         # Add to relevant YoE if it matches JD
-        if _is_role_relevant(title, desc, jd_data):
+        if _is_role_relevant(title, desc, jd_data, jd_aliases):
             relevant_months += months
             
         # Track progression
@@ -117,16 +178,16 @@ def calculate_career_score(candidate: dict, jd_data: dict = None) -> float:
     else:
         yoe_score = relevant_yoe * 12.5 # 0-25 points
         
-    # 2. Progression Score (Max 30)
+    # 2. Progression Score (Max 25)
     prog_score = 0.0
     level_growth = end_level - start_level
     
     if level_growth > 0:
-        prog_score = min(30.0, level_growth * 10.0)
+        prog_score = min(25.0, level_growth * 8.0)
     elif level_growth == 0:
-        prog_score = 15.0 # Steady
+        prog_score = 12.0 # Steady
     else:
-        prog_score = 5.0 # Demotion
+        prog_score = 4.0 # Demotion
         
     # Title Inflation Penalty
     # If they claim to be a CTO (level 7) but only have 2 years of total experience, heavily penalize.
@@ -144,6 +205,10 @@ def calculate_career_score(candidate: dict, jd_data: dict = None) -> float:
             stab_score = 10.0 + ((avg_tenure_years - 1.5) / 1.5) * 10.0
         else:
             stab_score = avg_tenure_years * 6.6
+    
+    # 4. Education Score (Max 5)
+    edu_score = _calculate_education_score(candidate)
             
-    final_score = yoe_score + prog_score + stab_score
+    final_score = yoe_score + prog_score + stab_score + edu_score
     return min(100.0, max(0.0, final_score))
+
