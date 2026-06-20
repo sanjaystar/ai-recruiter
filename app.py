@@ -72,7 +72,7 @@ def run_ranking(candidates: list, jd_text: str, jd_data: dict) -> pd.DataFrame:
     sparse_matrix = vectorizer.fit_transform(texts)
     
     # Dense Embeddings
-    model = SentenceTransformer(".models/all-MiniLM-L6-v2")
+    model = SentenceTransformer("./models/all-MiniLM-L6-v2")
     embeddings = model.encode(texts, batch_size=64, normalize_embeddings=True)
     
     # JD vectors
@@ -159,6 +159,9 @@ def main():
     st.markdown("""
     Upload a small candidate sample (≤100 candidates in JSON/JSONL format) and a job description 
     to run the full hybrid semantic ranking pipeline.
+    
+    > **Note:** This sandbox builds indexes on-the-fly for small samples (≤100 candidates). 
+    > The full 100K ranking uses precomputed dense/sparse artifacts for sub-30-second execution.
     """)
     
     col1, col2 = st.columns(2)

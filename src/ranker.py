@@ -6,7 +6,6 @@ and produces the final top 100 ranking.
 
 import pandas as pd
 import numpy as np
-from .honeypot import apply_honeypot_penalty
 
 def rank_candidates(df: pd.DataFrame, jd_weights: dict, top_n: int = 100) -> pd.DataFrame:
     """
@@ -17,6 +16,13 @@ def rank_candidates(df: pd.DataFrame, jd_weights: dict, top_n: int = 100) -> pd.
     """
     if df.empty:
         return df
+
+    # Normalize skill_score to 0-100 so it's on the same scale as all other
+    # component scores before weighting. Without this, behavior_score (0-100)
+    # silently outweighs skill_score (0-~50) despite skill having a higher weight.
+    skill_max = df["skill_score"].max()
+    if skill_max > 0:
+        df["skill_score"] = (df["skill_score"] / skill_max) * 100.0
 
     # 1. Apply Dynamic Weights
     w_skill = jd_weights.get("skill_weight", 0.30)

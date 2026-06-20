@@ -92,7 +92,20 @@ def calculate_trust(candidate: dict) -> tuple[float, bool, list[str]]:
     
     if negative_dates:
         concerns.append("impossible date ranges in career timeline")
-            
+
+    # Explicit check: sum of career duration_months vs stated YOE
+    career_duration_sum = sum(
+        safe_float(role.get("duration_months", 0))
+        for role in career
+        if safe_float(role.get("duration_months", 0)) > 0
+    )
+    if career_duration_sum > (yoe_months + 24):
+        score -= 15.0
+        concerns.append(
+            f"career history totals {career_duration_sum/12:.1f}yrs "
+            f"but stated YOE is {yoe:.1f}yrs"
+        )
+
     # Check Overlapping Jobs
     # Since career histories are short (<10 items), O(N^2) is extremely fast
     overlap_count = 0

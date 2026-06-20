@@ -10,7 +10,7 @@ from datetime import datetime
 from .schema_analyzer import get_profile, get_redrob_signals, safe_float, safe_str
 
 # Assume a static reference date for deterministic scoring in the hackathon dataset
-REFERENCE_DATE = datetime(2024, 6, 1)
+REFERENCE_DATE = datetime(2026, 6, 20)
 
 # JD specifies Pune/Noida with openness to Tier-1 Indian cities
 PREFERRED_LOCATIONS = {"pune", "noida"}

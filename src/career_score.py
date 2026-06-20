@@ -4,10 +4,10 @@ Evaluates a candidate's career trajectory, calculating RELEVANT Years of Experie
 title progression, stability, and education fit relative to the JD.
 """
 from datetime import datetime
-from .schema_analyzer import get_career_history, get_education, safe_str, safe_float
+from .schema_analyzer import get_career_history, get_education, safe_str
 from .skill_taxonomy import TAXONOMY
 
-REFERENCE_DATE = datetime(2024, 6, 1)
+REFERENCE_DATE = datetime(2026, 6, 20)
 
 TITLE_HIERARCHY = {
     "intern": 1, "trainee": 1,

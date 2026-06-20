@@ -49,10 +49,16 @@ def parse_jd(filepath: str) -> dict:
     if "culture" in text_lower or "fit" in text_lower or "behavior" in text_lower:
         base_weights["behavior_weight"] += 0.05
         base_weights["skill_weight"] -= 0.05
-        
+
     if "production" in text_lower or "scale" in text_lower or "deployment" in text_lower:
         base_weights["domain_weight"] += 0.05
         base_weights["behavior_weight"] -= 0.05
+
+    # Use domain_emphasis: JDs dense with domain-specific terms reward domain matching more.
+    total_domain_mentions = sum(domain_counts.values())
+    if total_domain_mentions > 20:
+        base_weights["domain_weight"] += 0.05
+        base_weights["skill_weight"] -= 0.05
 
     # Normalize weights to exactly 1.0 just in case
     total_weight = sum(base_weights.values())
@@ -87,6 +93,14 @@ def parse_jd(filepath: str) -> dict:
             elif any(k in para for k in negative_keywords):
                 current_mode = "negative"
                 continue
+            else:
+                # Only escape negative mode — negative sections are contiguous in
+                # real JDs and must not bleed into closing sections.
+                # Required/preferred mode must persist across short content bullets
+                # (e.g. "LLM fine-tuning experience (LoRA, QLoRA, PEFT)") so they
+                # still fall through to skill extraction below.
+                if current_mode == "negative":
+                    current_mode = "neutral"
                 
         # Extract skills based on the active section mode
         for domain, aliases in TAXONOMY.items():

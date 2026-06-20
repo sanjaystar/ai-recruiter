@@ -45,8 +45,8 @@ def calculate_hybrid_relevance(jd_embedding: np.ndarray, jd_bm25_vector,
         norm_sparse = np.zeros_like(sparse_scores)
         
     # 5. Blend into Hybrid Score
-    # Give 70% weight to sparse to ensure exact technical keywords match, 
-    # 30% to dense to capture latent semantic variants.
-    hybrid_scores = (norm_sparse * 0.70) + (norm_dense * 0.30)
+    # 65% dense: the JD's Tier-5 trap means candidates without exact keyword overlap
+    # must still surface via semantic similarity.
+    hybrid_scores = (norm_dense * 0.65) + (norm_sparse * 0.35)
     
     return hybrid_scores

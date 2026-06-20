@@ -28,10 +28,11 @@ methodology_summary: >
   dense sentence-transformer embeddings (30%) for candidate-JD matching. 
   Candidates scored across 5 dimensions: skill taxonomy match with proficiency/assessment 
   weighting, career trajectory with taxonomy-alias relevance detection, behavioral 
-  recruitability using all 23 Redrob signals including location/work-mode fit, 
-  trust/honeypot anomaly detection, and JD-specific fit penalties for consulting-only 
-  careers, title-chasers, and keyword stuffers. Architecture split into offline 
-  pre-computation (embeddings + indexes) and online ranking (< 5 seconds, CPU-only).
+  recruitability using Redrob engagement, availability, verification, market-demand, 
+  and logistics signals including location/work-mode fit, trust/honeypot anomaly 
+  detection, and JD-specific fit penalties for consulting-only careers, title-chasers, 
+  and keyword stuffers. Architecture split into offline pre-computation (embeddings 
+  + indexes) and online ranking (< 5 seconds, CPU-only).
 
 # Hardware the indexes were built on (for reproducibility context)
 build_environment:
