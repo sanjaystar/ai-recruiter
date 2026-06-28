@@ -67,11 +67,3 @@ def get_canonical_skill(raw_skill: str) -> str:
                     return domain
 
     return raw_skill_lower
-
-def build_taxonomy_lookup_cache(skill_names: list[str]) -> dict[str, str]:
-    """
-    For performance optimization. Given a list of unique raw skills, 
-    returns a dictionary mapping raw_skill -> canonical_skill.
-    This avoids re-evaluating the rules for every candidate.
-    """
-    return {skill: get_canonical_skill(skill) for skill in skill_names}

@@ -6,10 +6,7 @@ Recruitability/Conversion Probability to maximize methodology coherence.
 """
 
 from datetime import datetime
-from .schema_analyzer import get_redrob_signals, safe_float
-
-# Assume a static reference date for deterministic scoring in the hackathon dataset
-REFERENCE_DATE = datetime(2024, 6, 1)
+from .schema_analyzer import get_redrob_signals, safe_float, REFERENCE_DATE
 
 def _calculate_days_ago(date_str: str) -> float:
     if not date_str:
@@ -21,7 +18,7 @@ def _calculate_days_ago(date_str: str) -> float:
     except (ValueError, TypeError):
         return 365.0 * 5
 
-def calculate_behavior_score(candidate: dict, jd_data: dict = None) -> float:
+def calculate_behavior_score(candidate: dict) -> float:
     """
     Computes behavior score.
     Engagement max points: 40
@@ -92,14 +89,7 @@ def calculate_behavior_score(candidate: dict, jd_data: dict = None) -> float:
     open_flag = signals.get("open_to_work_flag", False)
     apps_30d = safe_float(signals.get("applications_submitted_30d", 0.0))
     notice_days = safe_float(signals.get("notice_period_days", 90.0))
-    
-    # Salary Check
-    cand_salary_min = safe_float(signals.get("expected_salary_range_inr_lpa", {}).get("min", -1.0))
-    jd_salary_budget = 0.0
-    if jd_data:
-        # JD data might have salary_budget_lpa. If missing, assume 0.0 (no constraint)
-        jd_salary_budget = safe_float(jd_data.get("salary_budget_lpa", 0.0))
-        
+
     recruitability = 0.0
     
     # Recruiter Response Rate (Max 15)
@@ -138,14 +128,5 @@ def calculate_behavior_score(candidate: dict, jd_data: dict = None) -> float:
         recruitability += 6.0
     elif notice_days <= 90:
         recruitability += 2.0
-        
-    # Salary Mismatch Penalty
-    if jd_salary_budget > 0 and cand_salary_min > 0:
-        if cand_salary_min > jd_salary_budget * 1.2:
-            # Heavily penalize if candidate minimum is 20%+ higher than JD budget
-            recruitability *= 0.5
-        elif cand_salary_min > jd_salary_budget:
-            # Mildly penalize if candidate minimum is higher than budget
-            recruitability *= 0.8
-            
+
     return min(100.0, max(0.0, engagement + recruitability))

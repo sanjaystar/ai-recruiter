@@ -7,17 +7,23 @@ import re
 import os
 from .skill_taxonomy import TAXONOMY
 
+# How the JD names the domains it explicitly rejects (see "do NOT want" section).
+_NEG_JD_TRIGGERS = {
+    "COMPUTER_VISION": ["computer vision", "image classification", "image processing"],
+    "SPEECH": ["speech", "text-to-speech", "speech recognition"],
+    "ROBOTICS": ["robotics", "robot"],
+}
+
 def parse_jd(filepath: str) -> dict:
     """
     Parses a job description text file deterministically.
     
     Returns:
     {
-      "required_skills": list[str],
-      "preferred_skills": list[str],
-      "negative_signals": list[str],
-      "weights": dict,
-      "domain_emphasis": dict
+      "required_skills": list[str],   # JD domains marked required
+      "preferred_skills": list[str],  # JD domains marked nice-to-have
+      "negative_domains": list[str],  # explicitly-rejected domains (CV/speech/robotics)
+      "weights": dict,                # structural component weights summing to 1.0
     }
     """
     if not os.path.exists(filepath):
@@ -101,17 +107,24 @@ def parse_jd(filepath: str) -> dict:
         if current_mode == "negative" and len(para) > 10:
             negative_signals.append(para)
 
-    # Fallback: if section parsing failed to find required skills, 
+    # Fallback: if section parsing failed to find required skills,
     # use the top most frequent domains from our term frequency counter.
     if not required_skills:
         sorted_domains = sorted(domain_counts.items(), key=lambda x: x[1], reverse=True)
         # Take domains with at least 2 mentions as required
         required_skills = {d for d, count in sorted_domains if count >= 2}
 
+    # 3. Use the previously-discarded negative section: which rejected technical
+    # domains does this JD actually call out?
+    neg_text = " ".join(negative_signals)
+    negative_domains = [
+        domain for domain, triggers in _NEG_JD_TRIGGERS.items()
+        if any(re.search(rf"\b{re.escape(t)}\b", neg_text) for t in triggers)
+    ]
+
     return {
-        "required_skills": list(required_skills),
-        "preferred_skills": list(preferred_skills),
-        "negative_signals": negative_signals,
+        "required_skills": sorted(list(required_skills)),
+        "preferred_skills": sorted(list(preferred_skills)),
+        "negative_domains": negative_domains,
         "weights": base_weights,
-        "domain_emphasis": domain_counts
     }

@@ -9,8 +9,8 @@ import os
 
 def stream_candidates(filepath: str, stats: dict = None):
     """
-    Generator that yields candidate dictionaries one by one.
-    Transparently handles both raw .jsonl, .json arrays, and compressed .gz files.
+    Generator that yields candidate dictionaries one at a time from a .jsonl
+    (or gzip-compressed .jsonl.gz) file, so the 100K pool never lives in memory at once.
     """
     if stats is None:
         stats = {"loaded": 0, "filtered": 0, "errors": {}}
@@ -23,66 +23,22 @@ def stream_candidates(filepath: str, stats: dict = None):
     else:
         open_func = lambda f: open(f, 'r', encoding='utf-8')
 
-    # Read first character to determine format
     with open_func(filepath) as f:
-        first_char = ""
-        while True:
-            char = f.read(1)
-            if not char:
-                break
-            if char.strip():
-                first_char = char
-                break
-                
-    if first_char == '[':
-        # JSON Array format (loads entirely into memory, which is fine for < 16GB)
-        print("Detected JSON Array format. Loading entire array...")
-        with open_func(filepath) as f:
+        for line_idx, line in enumerate(f):
+            line = line.strip()
+            if not line:
+                continue
             try:
-                data = json.load(f)
-                for item in data:
-                    if not isinstance(item, dict):
-                        stats["filtered"] += 1
-                        continue
-                    stats["loaded"] += 1
-                    yield item
+                obj = json.loads(line)
+                if not isinstance(obj, dict):
+                    stats["filtered"] += 1
+                    continue
+                stats["loaded"] += 1
+                yield obj
             except json.JSONDecodeError as e:
                 stats["filtered"] += 1
-                stats["errors"]["json_array_error"] = str(e)
-    else:
-        # JSONL format (one object per line)
-        print("Detected JSONL format. Streaming line-by-line...")
-        with open_func(filepath) as f:
-            for line_idx, line in enumerate(f):
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    obj = json.loads(line)
-                    if not isinstance(obj, dict):
-                        stats["filtered"] += 1
-                        continue
-                    stats["loaded"] += 1
-                    yield obj
-                except json.JSONDecodeError as e:
-                    stats["filtered"] += 1
-                    error_msg = f"Line {line_idx}: {str(e)}"
-                    if "decode_errors" not in stats["errors"]:
-                        stats["errors"]["decode_errors"] = []
-                    # Limit error messages logged to avoid spam
-                    if len(stats["errors"]["decode_errors"]) < 10:
-                        stats["errors"]["decode_errors"].append(error_msg)
-
-def batch_stream_candidates(filepath: str, batch_size: int = 5000, stats: dict = None):
-    """
-    Yields lists of candidates in chunks to support vectorized batch processing.
-    """
-    batch = []
-    for candidate in stream_candidates(filepath, stats):
-        batch.append(candidate)
-        if len(batch) >= batch_size:
-            yield batch
-            batch = []
-            
-    if batch:
-        yield batch
+                if "decode_errors" not in stats["errors"]:
+                    stats["errors"]["decode_errors"] = []
+                # Limit error messages logged to avoid spam
+                if len(stats["errors"]["decode_errors"]) < 10:
+                    stats["errors"]["decode_errors"].append(f"Line {line_idx}: {str(e)}")

@@ -5,7 +5,7 @@ Returns the score and a boolean flag indicating if it's a mathematically impossi
 """
 
 from datetime import datetime
-from .schema_analyzer import get_profile, get_career_history, get_skills, safe_float
+from .schema_analyzer import get_profile, get_career_history, get_skills, safe_float, REFERENCE_DATE
 
 def calculate_trust(candidate: dict) -> tuple[float, bool]:
     """
@@ -60,8 +60,8 @@ def calculate_trust(candidate: dict) -> tuple[float, bool]:
             if start_str:
                 start_dt = datetime.fromisoformat(start_str[:10])
                 if is_current or not end_str:
-                    # Treat current roles as extending into the future for overlap checking
-                    end_dt = datetime(2026, 12, 31) 
+                    # Current roles run up to the dataset's reference "now".
+                    end_dt = REFERENCE_DATE
                 else:
                     end_dt = datetime.fromisoformat(end_str[:10])
                     
@@ -95,7 +95,22 @@ def calculate_trust(candidate: dict) -> tuple[float, bool]:
         # Deduct points for concurrent roles (e.g., "Overemployed" or fake profiles)
         score -= (overlap_count * 15.0)
         # 3+ overlapping full-time long-term roles is statistically absurd
-        if overlap_count >= 3: 
+        if overlap_count >= 3:
+            is_honeypot = True
+
+    # ==========================================
+    # 3. Experience vs. Timeline (honeypot type 2)
+    # ==========================================
+    # The detectable form of "8 years of experience at a company founded 3 years ago":
+    # the profile's claimed years_of_experience is far more than the candidate's actual
+    # career timeline can account for. In this dataset legit profiles have yoe ~= span
+    # (99th percentile gap is 0.4y), so a multi-year gap is a manufactured profile.
+    if intervals:
+        earliest = min(s for s, _ in intervals)
+        latest = max(e for _, e in intervals)
+        span_years = max(0.0, (latest - earliest).days / 365.0)
+        if yoe - span_years >= 5.0:
+            score -= 45.0
             is_honeypot = True
 
     return max(0.0, score), is_honeypot

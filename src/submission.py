@@ -1,11 +1,12 @@
 """
 submission.py
-Outputs the final Top 100 ranking strictly matching the submission_spec.md constraints.
+Writes the final Top 100 ranking to CSV with the required columns
+(candidate_id, rank, score, reasoning), in order.
 """
 
 import pandas as pd
 
-def generate_submission(top_100_df: pd.DataFrame, out_path: str = "submission.csv"):
+def generate_submission(top_100_df: pd.DataFrame, out_path: str = "Nova.csv"):
     """
     Formats the DataFrame columns and exports to CSV.
     Constraints Enforced:

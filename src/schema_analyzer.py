@@ -3,6 +3,13 @@ schema_analyzer.py
 Provides robust, fast, and safe access to nested candidate data structures to prevent key errors.
 """
 
+from datetime import datetime
+
+# Reference "today" for the dataset. Derived from the dataset's own activity range
+# (max last_active_date = 2026-05-27), NOT the real wall-clock date. All recency/notice
+# scoring is measured against this so the signals actually differentiate candidates.
+REFERENCE_DATE = datetime(2026, 6, 1)
+
 def get_candidate_id(candidate: dict) -> str:
     return candidate.get("candidate_id", "")
 
@@ -11,9 +18,6 @@ def get_profile(candidate: dict) -> dict:
 
 def get_career_history(candidate: dict) -> list[dict]:
     return candidate.get("career_history", [])
-
-def get_education(candidate: dict) -> list[dict]:
-    return candidate.get("education", [])
 
 def get_skills(candidate: dict) -> list[dict]:
     return candidate.get("skills", [])

@@ -1,5 +1,6 @@
-pandas>=2.0.0
-numpy>=1.24.0
-scikit-learn>=1.3.0
-sentence-transformers>=2.2.2
-pyarrow>=14.0.0
+# Pinned to the versions the indexes + ranker were built and tested on.
+# Relevance is purely dense-embedding based. scipy is a sentence-transformers dependency.
+numpy==2.4.6
+scipy==1.17.1
+pandas==3.0.3
+sentence-transformers==5.5.1
