@@ -1,38 +1,19 @@
-"""
-semantic_relevance.py
-Computes the Domain Relevance Score as dense embedding similarity. Two embedding
-signals combine multiplicatively:
-
-  1. CONTENT fit  -- how close the candidate's whole profile text *means* to the JD
-     (calculate_domain_relevance). A candidate who built a recommendation system at a
-     product company scores high even if they never wrote "RAG" or "Pinecone".
-
-  2. ROLE fit     -- how close the candidate's actual job roles (current + past titles)
-     embed to the target role (RoleFitScorer). This stops a fundamentally non-technical
-     profile (e.g. an "HR Manager") from ranking on text alone just because the summary
-     and skills are padded with AI keywords. It is purely semantic: cosine of title
-     embeddings, never substring/keyword matching.
-"""
+"""Domain relevance = semantic content fit x semantic role fit (no keyword matching)."""
 import numpy as np
 
-# A short natural-language description of the target role. Used only as an embedding
-# anchor (cosine compared to candidate titles), never as a match string.
+# Embedding anchor for the target role (cosine-compared to candidate titles), not a match string.
 ROLE_DESCRIPTION = (
     "Senior AI Engineer working on embeddings, retrieval, ranking, search, "
     "and recommendation systems"
 )
-# Role-fit factor shaping (tuned against the pool's title distribution): titles embedding
-# at/above HIGH are a clean role match (no discount); at/below LOW they are clearly off-role
-# and capped to FLOOR; linear in between.
+# Role-fit shaping, tuned to the pool: >=HIGH is a clean match, <=LOW capped to FLOOR, linear between.
 ROLE_FIT_LOW = 0.20
 ROLE_FIT_HIGH = 0.35
 ROLE_FIT_FLOOR = 0.30
 
 
 class RoleFitScorer:
-    """Semantic role-fit gate. Returns a multiplier in [FLOOR, 1.0] from how closely a
-    candidate's job titles embed to the target role. Titles come from a tiny fixed
-    vocabulary, so each is encoded at most once."""
+    """Role-fit gate: multiplier in [FLOOR, 1.0] from how closely titles embed to the target role."""
 
     def __init__(self, model, role_description: str = ROLE_DESCRIPTION):
         self.model = model
@@ -61,24 +42,13 @@ class RoleFitScorer:
 
 def calculate_domain_relevance(jd_embedding: np.ndarray,
                                candidate_embeddings: np.ndarray) -> np.ndarray:
-    """
-    Pure semantic relevance (0-100) = cosine similarity of candidate profile embedding
-    to the JD embedding, min-max normalized across the pool.
-
-    jd_embedding:          shape (1, 384), L2-normalized
-    candidate_embeddings:  shape (N, 384), L2-normalized
-
-    Returns:
-        np.ndarray of shape (N,) with normalized relevance scores in [0, 100].
-    """
+    """Cosine similarity of each profile embedding to the JD, min-max normalized to 0-100."""
     if len(candidate_embeddings) == 0:
         return np.array([])
 
-    # Embeddings are L2-normalized, so the dot product is cosine similarity.
+    # L2-normalized embeddings, so dot product is cosine similarity.
     dense_scores = np.dot(candidate_embeddings, jd_embedding.T).flatten()
 
-    # Min-max normalize the cosine similarities to 0-100 so the configured
-    # domain_weight means what it says when components are combined.
     dmin, dmax = dense_scores.min(), dense_scores.max()
     if dmax > dmin:
         return ((dense_scores - dmin) / (dmax - dmin)) * 100.0

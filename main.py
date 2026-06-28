@@ -1,12 +1,7 @@
-"""
-main.py
-Coordinates the online sandbox execution. Loads static artifacts and processes candidates.
-"""
+"""Coordinates sandbox execution: loads artifacts, scores candidates, writes the ranking."""
 
 import os
-# Hard-guarantee the ranking step never touches the network: force HuggingFace /
-# Transformers into offline mode BEFORE importing sentence-transformers, so the model
-# loads only from the local ./models cache. Must be set prior to the import to take effect.
+# Force HF/Transformers offline before importing sentence-transformers (must precede import).
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 
@@ -44,7 +39,6 @@ def main():
 
     start_time = time.time()
 
-    # Safety Check for Indexes
     required_artifacts = ["embeddings.npy", "candidate_ids.json", "career_embeddings.npy",
                           "career_role_counts.json", "models/all-MiniLM-L6-v2"]
     if not all(os.path.exists(p) for p in required_artifacts):
@@ -59,7 +53,7 @@ def main():
     jd_data = parse_jd(jd_path)
     jd_text = get_jd_text(jd_path)
 
-    # 1. Load precomputed dense-embedding artifacts.
+    # 1. Load artifacts
     candidate_embeddings = np.load("embeddings.npy")
     with open("candidate_ids.json", "r") as f:
         candidate_ids = json.load(f)
@@ -72,12 +66,10 @@ def main():
     # 2. Process JD
     jd_embedding = model.encode([jd_text], normalize_embeddings=True)
 
-    # Embedding anchors for semantic skill matching (no keyword/taxonomy strings).
     skill_matcher = build_skill_matcher(model, jd_data)
-    # Semantic role-fit gate (title embeddings vs the target role).
     role_scorer = RoleFitScorer(model)
 
-    # 3. Calculate Domain Relevance (pure dense embedding similarity)
+    # 3. Domain relevance
     domain_scores = calculate_domain_relevance(
         jd_embedding=jd_embedding,
         candidate_embeddings=candidate_embeddings,
@@ -85,8 +77,7 @@ def main():
 
     domain_dict = {cid: score for cid, score in zip(candidate_ids, domain_scores)}
 
-    # 3b. Semantic per-role career relevance (one vectorized pass over all roles), then
-    # slice the flat boolean array back into each candidate's roles via the role counts.
+    # 3b. Per-role career relevance: one vectorized pass, then slice back per candidate.
     career_anchors = build_career_anchors(model, jd_data)
     role_relevant = role_relevance_from_embeddings(career_embeddings, career_anchors)
     role_rel_by_cid = {}
@@ -95,7 +86,7 @@ def main():
         role_rel_by_cid[cid] = role_relevant[pos:pos + cnt]
         pos += cnt
 
-    # 4. Stream Candidates (pass 1: score everyone, keep only compact feature rows)
+    # 4. Pass 1: score everyone, keep only compact feature rows
     features_list = []
 
     stats = {"loaded": 0, "filtered": 0, "errors": {}}
@@ -105,7 +96,7 @@ def main():
             continue
 
         s_score = calculate_skill_score(candidate, jd_data, skill_matcher)
-        # Domain relevance = semantic content fit (precomputed) x semantic role fit.
+        # Domain relevance = content fit (precomputed) x role fit.
         profile = candidate.get("profile", {})
         titles = [profile.get("current_title", "")] + [
             r.get("title", "") for r in candidate.get("career_history", [])
@@ -134,8 +125,7 @@ def main():
     df = pd.DataFrame(features_list)
     top_100 = rank_candidates(df, jd_data.get("weights", {}), top_n=100)
 
-    # Pass 2: re-stream and keep the full records for ONLY the Top 100, so we never
-    # hold all 100K raw dicts in memory just to write 100 reasonings.
+    # Pass 2: re-stream and keep full records for only the Top 100.
     top_ids = set(top_100["candidate_id"])
     raw_cache = {}
     for candidate in stream_candidates(candidates_path):

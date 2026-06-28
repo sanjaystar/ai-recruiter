@@ -1,10 +1,4 @@
-"""
-reasoning.py
-Generates factual, deterministic, varied 1-2 sentence reasonings for the submission.
-Every claim is read straight from the candidate's profile/signals (no LLM, no
-hallucination). Structure varies per candidate, skills shown are filtered to the
-JD's domains, and one honest concern is surfaced where the data shows one.
-"""
+"""Deterministic factual 1-2 sentence reasoning per candidate (no LLM)."""
 
 import hashlib
 from datetime import datetime
@@ -13,7 +7,7 @@ from .schema_analyzer import get_profile, get_skills, get_redrob_signals, safe_f
 from .skill_taxonomy import get_canonical_skill
 
 _PROF_RANK = {"expert": 3, "advanced": 2, "intermediate": 1, "beginner": 0}
-# Generic software/data skills aren't "central to a retrieval/ranking role".
+# Generic software/data skills aren't central to a retrieval/ranking role.
 _GENERIC_DOMAINS = {"SOFTWARE_ENGINEERING", "DATA_ENGINEERING"}
 
 
@@ -89,7 +83,7 @@ def generate_reasoning(candidate: dict, rank: int, final_score: float, jd_data: 
     else:
         lead = "Borderline"
 
-    # Deterministic structural variety so the 10 sampled rows don't read as a template.
+    # Deterministic structural variety so rows don't read as a template
     cid = candidate.get("candidate_id", "")
     variant = (int(hashlib.md5(cid.encode()).hexdigest(), 16) % 4) if cid else (rank % 4)
     if variant == 0:

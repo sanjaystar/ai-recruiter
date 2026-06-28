@@ -1,9 +1,4 @@
-"""
-build_index.py
-Offline preprocessing script to build the dense semantic-search artifacts.
-Downloads the SentenceTransformer and builds the dense embedding index plus the
-candidate-id ordering. Relevance is purely semantic (see src/semantic_relevance.py).
-"""
+"""Offline preprocessing: build dense profile + per-role career embeddings and id ordering."""
 import os
 import json
 import argparse
@@ -14,7 +9,6 @@ from src.loader import stream_candidates
 from src.schema_analyzer import get_candidate_id, safe_str, get_profile, get_skills, get_career_history
 
 def concat_candidate_text(candidate: dict) -> str:
-    """Concatenates key textual fields for dense retrieval."""
     profile = get_profile(candidate)
     skills = get_skills(candidate)
     career = get_career_history(candidate)
@@ -37,7 +31,6 @@ def concat_candidate_text(candidate: dict) -> str:
     return " ".join([p for p in parts if p]).lower()
 
 def concat_role_text(role: dict) -> str:
-    """Per-role text (title + description) used for semantic career relevance."""
     return f"{safe_str(role.get('title', ''))}. {safe_str(role.get('description', ''))}".lower()
 
 def main():

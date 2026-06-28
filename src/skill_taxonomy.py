@@ -1,9 +1,5 @@
-"""
-skill_taxonomy.py
-Defines the centralized taxonomy of skills, replacing exact keyword matching.
-"""
+"""Skill taxonomy: alias groups under canonical domain keys."""
 
-# TAXONOMY groups exact variants and aliases under a common domain key.
 TAXONOMY = {
     "VECTOR_DATABASES": [
         "faiss", "qdrant", "milvus", "pinecone", "weaviate", "elasticsearch", 
@@ -40,29 +36,20 @@ TAXONOMY = {
 }
 
 def get_canonical_skill(raw_skill: str) -> str:
-    """
-    Returns the canonical domain name for a raw skill.
-    If no match is found, returns the raw_skill in lowercase.
-    
-    Uses partial matching (e.g. if 'qdrant' is within 'qdrant vector db').
-    """
+    """Map a raw skill to its canonical domain, or the lowercased raw skill if no match."""
     if not raw_skill:
         return ""
-        
+
     raw_skill_lower = raw_skill.lower().strip()
-    
-    # 1. Exact match pass
+
     for domain, aliases in TAXONOMY.items():
         if raw_skill_lower in aliases:
             return domain
-            
-    # 2. Substring match pass
+
     for domain, aliases in TAXONOMY.items():
         for alias in aliases:
-            # Check if the alias is a distinct word in the skill
-            # (To avoid matching "go" in "google")
             if alias in raw_skill_lower:
-                # Add a quick heuristic to avoid over-matching very short aliases
+                # Guard short aliases against over-matching (e.g. "go" in "google")
                 if len(alias) >= 3 or f" {alias} " in f" {raw_skill_lower} ":
                     return domain
 

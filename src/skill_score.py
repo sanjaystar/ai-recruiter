@@ -1,32 +1,10 @@
-"""
-skill_score.py
-Scores skill fit WITHOUT keyword/taxonomy string matching.
-
-Two ideas drive this:
-
-  1. STRUCTURED proof of depth. A listed skill is worthless on its own ("the word
-     appeared"). A skill only counts when the candidate has *verified* depth in it:
-     a Redrob platform assessment score (an actual test result), real endorsements,
-     and/or sustained duration of use. No proof -> the skill is ignored.
-
-  2. SEMANTIC cross-reference. Whether a verified skill is what the JD wants is decided
-     by embedding similarity between the skill's name and the JD's required/preferred
-     skill concepts -- NOT by exact-string / alias matching. "Vector Search" and
-     "Semantic Search" score high against the JD even though they are different strings.
-
-Final raw score = sum over verified skills of  depth x semantic_relevance x role_weight,
-with a semantic negative-domain penalty for candidates whose only verified strength sits
-in a JD-rejected area (computer vision / speech / robotics).
-"""
+"""Skill fit = verified depth x semantic relevance to JD domains (no keyword matching)."""
 
 import numpy as np
 
 from .schema_analyzer import get_skills, get_redrob_signals, safe_float, safe_int
 
-# Natural-language descriptions of each JD skill domain. These are EMBEDDING ANCHORS,
-# not match strings: candidate skill names are compared to them by cosine similarity,
-# never by substring. The set of anchors actually used is chosen per-JD from the
-# required/preferred/negative domains the JD parser detects.
+# Embedding anchors per JD domain (cosine-compared to skill names), not match strings.
 DOMAIN_PHRASES = {
     "VECTOR_DATABASES": "vector database and hybrid search infrastructure such as FAISS, Pinecone, Weaviate, Qdrant, Milvus, OpenSearch, Elasticsearch",
     "EMBEDDINGS": "embeddings-based retrieval using sentence transformers, BGE, E5, and embedding models",
@@ -44,30 +22,23 @@ NEGATIVE_PHRASES = {
     "ROBOTICS": "robotics, SLAM, motion planning, and autonomous navigation",
 }
 
-# Role weighting: a required-skill match is worth more than a preferred-skill match.
+# Required matches outweigh preferred.
 REQUIRED_W = 2.5
 PREFERRED_W = 1.0
 
-# Cosine floor below which a skill name is treated as semantically unrelated to the JD
-# (so generic terms contribute ~0). Tuned against the dataset's skill vocabulary.
+# Cosine floor below which a skill is treated as unrelated; tuned to the skill vocabulary.
 SIM_FLOOR = 0.30
-# A skill name this close to a rejected-domain anchor is clearly in that domain.
+# At/above this similarity to a rejected-domain anchor, a skill is clearly in that domain.
 NEG_SIM = 0.45
 
-# Verified-depth policy (assessment-anchored). An objective Redrob platform assessment
-# is the only un-fakeable evidence of skill depth, so it alone earns full credit.
-# Self-reported fields (duration, endorsements) are stuffable: a candidate can type
-# "14 months" against any skill. So an UNASSESSED skill earns only small, capped credit,
-# and ONLY when it carries real social proof (endorsements). Duration alone never
-# qualifies a skill -- that is exactly the "the word appeared" loophole we are closing.
-UNASSESSED_MIN_ENDORSEMENTS = 10   # below this, an untested skill does not count at all
+# Untested skills are self-reportable, so they earn only small capped credit and only with endorsements.
+UNASSESSED_MIN_ENDORSEMENTS = 10   # below this, an untested skill does not count
 UNASSESSED_DEPTH_CAP = 0.25        # per-skill ceiling for untested skills
-UNASSESSED_TOTAL_CAP = 2.0         # per-candidate ceiling on total untested contribution
+UNASSESSED_TOTAL_CAP = 2.0         # per-candidate ceiling on untested contribution
 
 
 class SkillMatcher:
-    """Holds the JD's anchor embeddings and a per-skill-name embedding cache so each of
-    the dataset's ~130 unique skill names is encoded at most once per run."""
+    """JD anchor embeddings plus a skill-name embedding cache (each name encoded once per run)."""
 
     def __init__(self, model, required_phrases, preferred_phrases, negative_phrases):
         self.model = model
@@ -96,8 +67,7 @@ class SkillMatcher:
 
 
 def build_skill_matcher(model, jd_data: dict) -> SkillMatcher:
-    """Builds the embedding anchors for THIS JD from its detected required/preferred/
-    negative domains."""
+    """Build this JD's embedding anchors from its required/preferred/negative domains."""
     req = [DOMAIN_PHRASES[d] for d in jd_data.get("required_skills", []) if d in DOMAIN_PHRASES]
     pref = [DOMAIN_PHRASES[d] for d in jd_data.get("preferred_skills", []) if d in DOMAIN_PHRASES]
     neg = [NEGATIVE_PHRASES[d] for d in jd_data.get("negative_domains", []) if d in NEGATIVE_PHRASES]
@@ -105,23 +75,15 @@ def build_skill_matcher(model, jd_data: dict) -> SkillMatcher:
 
 
 def _depth(assessment, duration_months: int, endorsements: int) -> tuple[float, bool]:
-    """Structured proof of skill depth. Returns (depth, assessed).
-
-    depth is 0.0 when the skill is unverified (just listed) so it contributes nothing.
-    `assessed` is True when the depth is backed by an objective platform assessment, so
-    the caller can cap untested credit separately.
-    """
+    """Structured proof of depth -> (depth, assessed); 0.0 when the skill is unverified."""
     dur_norm = min(duration_months / 48.0, 1.0)
     end_norm = min(endorsements / 40.0, 1.0)
 
     if assessment is not None:
-        # An actual platform test result is the strongest, most objective evidence and
-        # earns full credit; duration/endorsements only sweeten it.
+        # A platform test result earns full credit; duration/endorsements only sweeten it.
         return 0.6 * (assessment / 100.0) + 0.25 * dur_norm + 0.15 * end_norm, True
 
-    # No test result. Duration alone never qualifies (it is trivially self-reported).
-    # Only real social proof (endorsements) lets an untested skill count, and then only
-    # for a small, capped amount that duration can lightly amplify.
+    # Untested: only endorsements qualify, capped; duration alone never does.
     if endorsements < UNASSESSED_MIN_ENDORSEMENTS:
         return 0.0, False
     depth = min(0.15 * end_norm + 0.10 * dur_norm, UNASSESSED_DEPTH_CAP)
@@ -129,17 +91,14 @@ def _depth(assessment, duration_months: int, endorsements: int) -> tuple[float, 
 
 
 def calculate_skill_score(candidate: dict, jd_data: dict, matcher: SkillMatcher) -> float:
-    """Raw skill score for the candidate. Higher = more verified depth in skills that
-    semantically match what the JD asks for."""
+    """Raw skill score: verified depth in skills that semantically match the JD."""
     if matcher is None or (matcher.req_mat is None and matcher.pref_mat is None):
         return 0.0
 
     signals = get_redrob_signals(candidate)
     assessments = signals.get("skill_assessment_scores", {}) or {}
 
-    # Merge listed skills and assessed-but-unlisted skills into one verified view,
-    # keyed by skill name. The assessment dict itself is structured proof, so a skill
-    # the candidate was tested on counts even if they forgot to list it.
+    # Merge listed skills with assessed-but-unlisted ones (a test result counts even if unlisted).
     merged = {}
     for s in get_skills(candidate):
         name = s.get("name", "")
@@ -162,7 +121,7 @@ def calculate_skill_score(candidate: dict, jd_data: dict, matcher: SkillMatcher)
     for name, info in merged.items():
         depth, assessed = _depth(info["assessment"], info["duration"], info["endorsements"])
         if depth <= 0.0:
-            continue  # unverified -> the word appearing earns nothing
+            continue  # unverified earns nothing
 
         vec = matcher.embed(name)
         sim_req = matcher._max_sim(matcher.req_mat, vec)
@@ -178,19 +137,14 @@ def calculate_skill_score(candidate: dict, jd_data: dict, matcher: SkillMatcher)
             untested_score += contribution
 
         best_req_sim = max(best_req_sim, sim_req)
-        # Verified depth that clearly sits in a rejected domain and is NOT also relevant
-        # to the JD contributes to the negative load.
+        # Depth that sits in a rejected domain and isn't JD-relevant adds to negative load.
         if sim_neg >= NEG_SIM and sim_neg > sim_req:
             neg_load += depth * (sim_neg - SIM_FLOOR)
 
-    # Untested skills can collectively add only a small, capped amount, so a profile
-    # stuffed with many self-reported skills can never out-score genuine tested depth.
     score += min(untested_score, UNASSESSED_TOTAL_CAP)
 
-    # Semantic negative-domain penalty: only bite candidates whose verified strength is
-    # in computer-vision/speech/robotics AND who show no genuine retrieval/ranking
-    # relevance. A real AI engineer who merely also knows CV has some skill clearing the
-    # relevance bar, so they are never penalized.
+    # Negative-domain penalty: only candidates whose verified strength is in a rejected
+    # domain with no genuine JD relevance.
     if neg_load > 0.0 and best_req_sim < (SIM_FLOOR + 0.10):
         score -= min(neg_load * REQUIRED_W, 12.0)
 

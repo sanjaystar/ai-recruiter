@@ -1,20 +1,13 @@
-"""
-career_score.py
-Evaluates a candidate's career trajectory, calculating RELEVANT Years of Experience
-and title progression relative to the JD.
-"""
+"""Career score: relevant YoE, title progression, and tenure stability vs the JD."""
 import numpy as np
 
 from datetime import datetime
 from .schema_analyzer import get_career_history, safe_str, REFERENCE_DATE
 from .skill_score import DOMAIN_PHRASES
 
-# Generic domains never count, on their own, as applied-ML/retrieval work (mirrors the
-# old keyword path): a role is "relevant" only via the core retrieval/ranking/ML domains.
+# Generic domains never count as applied-ML/retrieval work on their own.
 _GENERIC_DOMAINS = {"SOFTWARE_ENGINEERING", "DATA_ENGINEERING"}
-# A role's text must embed at least this close to a core JD domain to count as relevant.
-# Tuned on the pool: genuine applied-ML role descriptions sit ~0.28-0.56, while
-# keyword-stuffers' role descriptions (their real work: marketing/sales/support) sit <=0.21.
+# Min cosine to a core JD domain for a role to count; tuned on the pool (real ~0.28-0.56, stuffers <=0.21).
 ROLE_RELEVANCE_THRESHOLD = 0.30
 
 TITLE_HIERARCHY = {
@@ -33,7 +26,7 @@ def _get_title_level(title: str) -> int:
     for key, level in TITLE_HIERARCHY.items():
         if key in title_lower and level > best_level:
             best_level = level
-    return best_level if best_level > 0 else 3 # Default to standard mid-level
+    return best_level if best_level > 0 else 3  # default mid-level
 
 def _parse_date(date_str: str) -> datetime:
     if not date_str:
@@ -44,9 +37,7 @@ def _parse_date(date_str: str) -> datetime:
         return REFERENCE_DATE
 
 def build_career_anchors(model, jd_data: dict) -> np.ndarray:
-    """Embedding anchors for "applied-ML / retrieval work", drawn from the JD's core
-    required/preferred domains (generic software/data domains excluded). Returns an
-    (k, 384) normalized matrix, or None if the JD has no core domains."""
+    """Embedding anchors from the JD's core domains (generic excluded), or None if none."""
     if not jd_data:
         return None
     core = {
@@ -59,21 +50,14 @@ def build_career_anchors(model, jd_data: dict) -> np.ndarray:
 
 
 def role_relevance_from_embeddings(role_embeddings: np.ndarray, anchors: np.ndarray) -> np.ndarray:
-    """Semantic per-role relevance: True where a role's text embedding is within
-    ROLE_RELEVANCE_THRESHOLD cosine of any core JD domain anchor. Vectorized over all
-    roles at once (no per-call string matching)."""
+    """Per-role relevance: True where a role embeds within ROLE_RELEVANCE_THRESHOLD of any anchor."""
     if anchors is None or len(role_embeddings) == 0:
         return np.zeros(len(role_embeddings), dtype=bool)
     return (role_embeddings @ anchors.T).max(axis=1) >= ROLE_RELEVANCE_THRESHOLD
 
 
 def calculate_career_score(candidate: dict, jd_data: dict = None, role_relevance=None) -> float:
-    """
-    Max points: 100
-    - Relevant Years of Experience: 50
-    - Title Progression (Velocity): 30
-    - Stability (Tenure): 20
-    """
+    """Score (max 100): relevant YoE (50) + title progression (30) + stability (20)."""
     career = get_career_history(candidate)
     if not career:
         return 0.0
@@ -82,17 +66,11 @@ def calculate_career_score(candidate: dict, jd_data: dict = None, role_relevance
     total_months = 0
     job_count = len(career)
 
-    # Semantic per-role relevance, precomputed from role-text embeddings (see main.py /
-    # role_relevance_from_embeddings). Aligned to career_history's original order. This is
-    # the primary defense against keyword-stuffers: a Marketing Manager can stuff "RAG,
-    # Embeddings, Pinecone" into their *skills* list, but their job *descriptions* are
-    # still about marketing — so the embeddings show low relevance and they earn little
-    # relevant tenure. Fallback (no embeddings passed): treat every role as relevant.
+    # Per-role relevance precomputed from embeddings; fallback treats every role as relevant.
     if role_relevance is None or len(role_relevance) != len(career):
         role_relevance = [True] * len(career)
 
-    # Career history is often newest first. Reverse for chronological, keeping each role's
-    # relevance flag attached through the sort.
+    # History is often newest-first; sort chronological, keeping each relevance flag attached.
     paired = sorted(zip(career, role_relevance),
                     key=lambda cr: _parse_date(cr[0].get("start_date", "")))
 
@@ -104,17 +82,11 @@ def calculate_career_score(candidate: dict, jd_data: dict = None, role_relevance
         start_d = _parse_date(role.get("start_date", ""))
         end_d = _parse_date(role.get("end_date", ""))
 
-        # Calculate duration
         months = max(1, (end_d.year - start_d.year) * 12 + end_d.month - start_d.month)
-
-        # Add to total YoE regardless
         total_months += months
-
-        # Add to relevant YoE if the role is semantically relevant to the JD
         if is_relevant:
             relevant_months += months
 
-        # Track progression
         level = _get_title_level(title)
         if i == 0:
             start_level = level
@@ -122,37 +94,34 @@ def calculate_career_score(candidate: dict, jd_data: dict = None, role_relevance
         
     relevant_yoe = relevant_months / 12.0
     total_yoe = total_months / 12.0
-    
-    # 1. Relevant Experience Score (Max 50)
-    # Prefer candidates in the 5-10 year relevant sweet spot. 
+
+    # 1. Relevant experience (max 50), favoring the 5-10 year sweet spot
     yoe_score = 0.0
     if relevant_yoe >= 10:
         yoe_score = 50.0
     elif relevant_yoe >= 5:
-        yoe_score = 45.0 + (relevant_yoe - 5) * 1.0 # 45-50 points
+        yoe_score = 45.0 + (relevant_yoe - 5) * 1.0
     elif relevant_yoe >= 2:
-        yoe_score = 25.0 + (relevant_yoe - 2) * 6.6 # 25-45 points
+        yoe_score = 25.0 + (relevant_yoe - 2) * 6.6
     else:
-        yoe_score = relevant_yoe * 12.5 # 0-25 points
-        
-    # 2. Progression Score (Max 30)
+        yoe_score = relevant_yoe * 12.5
+
+    # 2. Progression (max 30)
     prog_score = 0.0
     level_growth = end_level - start_level
-    
+
     if level_growth > 0:
         prog_score = min(30.0, level_growth * 10.0)
     elif level_growth == 0:
-        prog_score = 15.0 # Steady
+        prog_score = 15.0
     else:
-        prog_score = 5.0 # Demotion
-        
-    # Title Inflation Penalty
-    # If they claim to be a CTO (level 7) but only have 2 years of total experience, heavily penalize.
+        prog_score = 5.0
+
+    # Title inflation: senior title with little total experience
     if end_level >= 6 and total_yoe < 5:
         prog_score *= 0.1
-        
-    # 3. Stability Score (Max 20)
-    # Calculate average tenure per job
+
+    # 3. Stability (max 20): average tenure per job
     stab_score = 0.0
     if job_count > 0:
         avg_tenure_years = total_yoe / job_count
@@ -162,6 +131,6 @@ def calculate_career_score(candidate: dict, jd_data: dict = None, role_relevance
             stab_score = 10.0 + ((avg_tenure_years - 1.5) / 1.5) * 10.0
         else:
             stab_score = avg_tenure_years * 6.6
-            
+
     final_score = yoe_score + prog_score + stab_score
     return min(100.0, max(0.0, final_score))

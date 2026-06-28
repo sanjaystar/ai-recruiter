@@ -1,8 +1,4 @@
-"""
-features.py
-Defines the standard data structures for Candidate features to ensure
-consistent extraction and simplified DataFrame conversion.
-"""
+"""CandidateScore dataclass for feature rows."""
 
 from dataclasses import dataclass
 
@@ -17,7 +13,6 @@ class CandidateScore:
     is_honeypot: bool = False
 
     def to_dict(self):
-        """Used to rapidly serialize to dictionaries for Pandas ingestion."""
         return {
             "candidate_id": self.candidate_id,
             "skill_score": self.skill_score,

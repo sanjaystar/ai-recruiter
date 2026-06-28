@@ -1,9 +1,4 @@
-"""
-behavior_score.py
-Evaluates candidate behavior by fully utilizing all 23 available redrob_signals.
-Strictly splitting between Platform Engagement/Market Demand and 
-Recruitability/Conversion Probability to maximize methodology coherence.
-"""
+"""Behavior score (0-100): platform engagement (40) + recruitability (60)."""
 
 from datetime import datetime
 from .schema_analyzer import get_redrob_signals, safe_float, REFERENCE_DATE
@@ -19,17 +14,9 @@ def _calculate_days_ago(date_str: str) -> float:
         return 365.0 * 5
 
 def calculate_behavior_score(candidate: dict) -> float:
-    """
-    Computes behavior score.
-    Engagement max points: 40
-    Recruitability max points: 60
-    Total Max: 100
-    """
     signals = get_redrob_signals(candidate)
-    
-    # ==========================================
-    # 1. Platform Engagement & Market Demand (Max 40 points)
-    # ==========================================
+
+    # 1. Platform engagement & market demand (max 40)
     github = safe_float(signals.get("github_activity_score", -1.0))
     completeness = safe_float(signals.get("profile_completeness_score", 0.0))
     last_active_str = signals.get("last_active_date", "")
@@ -79,9 +66,7 @@ def calculate_behavior_score(candidate: dict) -> float:
     
     engagement += min(market_pts, 15.0)
         
-    # ==========================================
-    # 2. Recruitability Score (Max 60 points)
-    # ==========================================
+    # 2. Recruitability (max 60)
     resp_rate = safe_float(signals.get("recruiter_response_rate", 0.0))
     avg_resp_hrs = safe_float(signals.get("avg_response_time_hours", -1.0))
     interview_rate = safe_float(signals.get("interview_completion_rate", 0.0))
