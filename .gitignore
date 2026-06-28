@@ -1,7 +1,10 @@
 *.npy
 *.npz
-career_role_counts.json
-candidate_ids.json
+# Committed precomputed indexes (float16, sharded under 100 MB) so the Stage-3
+# ranking step reproduces from a plain `git clone` with no LFS.
+!embeddings.npy
+!embeddings.part*.npy
+!career_embeddings.part*.npy
 *.csv
 __pycache__/
 *.pyc
