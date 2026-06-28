@@ -1,61 +1,36 @@
-# AI Recruiter - Hybrid Semantic Ranking Engine
+# Intelligent Candidate Ranking System
 
-This repository contains a state-of-the-art **Hybrid Semantic Retrieval** and **Recruiter Intelligence** engine designed to rank 100,000 candidates against a Job Description in under 5 minutes without network or GPU access.
+## Approach
+Ranks 100,000 candidates against a job description offline, CPU-only, in well under 5 minutes, and returns the Top 100 with a factual reasoning for each. Every candidate is scored on five components — `skill_score` (verified-depth skills cross-referenced to the JD by embedding similarity), `semantic_relevance` (cosine fit of the candidate's dense profile embedding to the JD), `career_progression` (relevant tenure and seniority trajectory, relevance judged on per-role embeddings), a `role_fit_gate` (title embeddings vs. the target role, to drop off-role profiles), and `behavior`/`trust` (Redrob recruitability signals plus a consistency check that forces honeypots out). Each component is min-max normalized to 0–100 and combined with JD-derived weights. Zero keyword matching in candidate scoring — all five scoring components use embeddings or structured signals. Keyword taxonomy is used only for JD requirement extraction and reasoning display text. Relevance is decided purely by dense embeddings, so a candidate who built a recommendation system surfaces on meaning even without buzzwords, and a profile stuffed with the right words but the wrong actual work does not.
 
-## Architecture
+## Requirements
+- Python 3.10+
+- All dependencies in requirements.txt
 
-To satisfy strict sandbox constraints (`<5 min`, `<16GB RAM`, `CPU only`), the architecture is split asymmetrically:
+## Setup & Run
 
-1. **Offline Preprocessing (`build_index.py`)**
-   - Parses the massive `candidates.jsonl` dataset.
-   - Generates a **Sparse Matrix** (BM25 / sublinear TF-IDF) to capture exact technical jargon.
-   - Downloads `all-MiniLM-L6-v2` locally.
-   - Generates a **Dense Embedding Matrix** for all candidates to capture latent semantic meaning (e.g., mapping "LLMs" to "Foundational Models").
-   - Artifacts (`embeddings.npy`, `bm25_index.pkl`) are saved locally.
-
-2. **Online Ranking (`main.py`)**
-   - Instantaneously loads the offline binary artifacts into memory.
-   - Embeds only the single Job Description text.
-   - Executes massive parallel NumPy dot-products across 100,000 candidates in `<50ms`.
-   - Merges vector scores with deterministic heuristics (Relevant Years of Experience, Redrob Behavioral Signals, Honeypot Trust Checks).
-   - Generates final rankings and explainability text.
-
-## Installation
-
-Ensure you have Python 3.9+ installed.
-
+### Install
 ```bash
-# 1. Create a virtual environment
 python3 -m venv .venv
 source .venv/bin/activate
-
-# 2. Install dependencies
 pip install -r requirements.txt
 ```
 
-## Reproduction Workflow
-
-Follow these exact steps to reproduce the outputs.
-
-### Step 1: Build the Offline Indexes
-*Note: This step requires internet access to download the SentenceTransformer model and takes approximately 10-20 minutes depending on your CPU.*
-
+### Build the offline index
+Requires internet to download the `all-MiniLM-L6-v2` model (cached under `models/`); takes ~10–20 minutes on CPU. Writes the runtime artifacts to the repo root: `embeddings.npy`, `career_embeddings.npy`, `candidate_ids.json`, `career_role_counts.json`.
 ```bash
-python build_index.py \
-    --candidates candidates.jsonl \
-    --out-embed embeddings.npy \
-    --out-bm25 bm25_index.pkl
+python build_index.py --candidates candidates.jsonl
 ```
 
-### Step 2: Execute Sandbox Ranking
-*Note: This step perfectly mimics the Hackathon Sandbox. It requires NO internet, uses NO GPU, and executes in ~4 seconds.*
-
+### Run the ranking
+Runs fully offline (forces `TRANSFORMERS_OFFLINE`/`HF_HUB_OFFLINE`), CPU-only, under the 5-minute budget. Produces `Nova.csv` with the Top 100 candidates ranked 1–100, each with a `score` and a `reasoning`.
 ```bash
-python main.py \
-    --candidates candidates.jsonl \
-    --jd job_description.txt \
-    --out submission.csv
+python main.py --candidates candidates.jsonl --jd job_description.txt --out Nova.csv
 ```
 
-## Expected Outputs
-The final execution will generate `submission.csv` containing the Top 100 ranked candidates, sorted 1 to 100, with a dynamically generated `reasoning` string explaining *why* they were chosen based on both semantic match and behavioral intelligence.
+### Validate output
+Check the CSV against the official format validator before submitting — it enforces exactly 100 rows, ranks 1–100 each used once, scores non-increasing by rank, and ties broken by `candidate_id` ascending.
+```bash
+python validate_submission.py Nova.csv
+```
+Prints `Submission is valid.` on success, or the specific rule violations otherwise.

@@ -1,20 +1,14 @@
-"""
-build_index.py
-Offline preprocessing script to build the Hybrid Semantic Search artifacts.
-Downloads the SentenceTransformer and builds dense and sparse indices.
-"""
+"""Offline preprocessing: build dense profile + per-role career embeddings and id ordering."""
 import os
-import pickle
+import json
 import argparse
 import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
 from sentence_transformers import SentenceTransformer
 
 from src.loader import stream_candidates
 from src.schema_analyzer import get_candidate_id, safe_str, get_profile, get_skills, get_career_history
 
 def concat_candidate_text(candidate: dict) -> str:
-    """Concatenates key textual fields for dense/sparse retrieval."""
     profile = get_profile(candidate)
     skills = get_skills(candidate)
     career = get_career_history(candidate)
@@ -33,14 +27,19 @@ def concat_candidate_text(candidate: dict) -> str:
     for c in career:
         parts.append(safe_str(c.get("title", "")))
         parts.append(safe_str(c.get("description", "")))
-        
+
     return " ".join([p for p in parts if p]).lower()
 
+def concat_role_text(role: dict) -> str:
+    return f"{safe_str(role.get('title', ''))}. {safe_str(role.get('description', ''))}".lower()
+
 def main():
-    parser = argparse.ArgumentParser(description="Build offline dense and sparse indexes.")
+    parser = argparse.ArgumentParser(description="Build offline dense semantic indexes.")
     parser.add_argument("--candidates", type=str, default="candidates.jsonl", help="Path to candidates file")
     parser.add_argument("--out-embed", type=str, default="embeddings.npy", help="Output path for embeddings")
-    parser.add_argument("--out-bm25", type=str, default="bm25_index.pkl", help="Output path for BM25 index")
+    parser.add_argument("--out-ids", type=str, default="candidate_ids.json", help="Output path for candidate id ordering")
+    parser.add_argument("--out-career", type=str, default="career_embeddings.npy", help="Output path for per-role career embeddings")
+    parser.add_argument("--out-career-counts", type=str, default="career_role_counts.json", help="Output path for per-candidate role counts")
     args = parser.parse_args()
 
     print("Starting Offline Preprocessing Phase...")
@@ -56,7 +55,9 @@ def main():
     stats = {"loaded": 0, "filtered": 0, "errors": {}}
     candidate_ids = []
     texts = []
-    
+    role_texts = []      # flattened per-role text across all candidates
+    role_counts = []     # number of roles per candidate, aligned to candidate_ids
+
     print(f"Extracting text from {candidates_path}...")
     for candidate in stream_candidates(candidates_path, stats):
         cid = get_candidate_id(candidate)
@@ -65,32 +66,41 @@ def main():
         text = concat_candidate_text(candidate)
         candidate_ids.append(cid)
         texts.append(text)
-        
-    print(f"Extracted {len(texts)} candidates.")
-    
-    print("Building BM25 (TF-IDF) Sparse Index...")
-    vectorizer = TfidfVectorizer(stop_words='english', max_features=50000, sublinear_tf=True)
-    sparse_matrix = vectorizer.fit_transform(texts)
-    
-    with open(args.out_bm25, "wb") as f:
-        pickle.dump({
-            "vectorizer": vectorizer,
-            "matrix": sparse_matrix,
-            "candidate_ids": candidate_ids
-        }, f)
-    print(f"Saved {args.out_bm25}")
-        
-    print("Downloading & caching SentenceTransformer model locally...")
+        career = get_career_history(candidate)
+        role_counts.append(len(career))
+        for role in career:
+            role_texts.append(concat_role_text(role))
+
+    print(f"Extracted {len(texts)} candidates, {len(role_texts)} career roles.")
+
+    with open(args.out_ids, "w") as f:
+        json.dump(candidate_ids, f)
+    print(f"Saved {args.out_ids}")
+
+    with open(args.out_career_counts, "w") as f:
+        json.dump(role_counts, f)
+    print(f"Saved {args.out_career_counts}")
+
     model_name = "all-MiniLM-L6-v2"
-    model = SentenceTransformer(model_name)
-    os.makedirs("models", exist_ok=True)
-    model.save(f"models/{model_name}")
-    
-    print("Building Dense Embeddings (this may take 10-20 minutes)...")
+    model_path = f"./models/{model_name}"
+    if os.path.exists(model_path):
+        print(f"Loading SentenceTransformer model from {model_path}...")
+        model = SentenceTransformer(model_path)
+    else:
+        print("Downloading & caching SentenceTransformer model locally...")
+        model = SentenceTransformer(model_name)
+        os.makedirs("models", exist_ok=True)
+        model.save(model_path)
+
+    print("Building Dense Profile Embeddings (this may take 10-20 minutes)...")
     embeddings = model.encode(texts, batch_size=256, show_progress_bar=True, normalize_embeddings=True)
-    
     np.save(args.out_embed, embeddings)
     print(f"Saved {args.out_embed}")
+
+    print("Building Per-Role Career Embeddings...")
+    career_embeddings = model.encode(role_texts, batch_size=256, show_progress_bar=True, normalize_embeddings=True)
+    np.save(args.out_career, career_embeddings)
+    print(f"Saved {args.out_career}")
     print("Offline Preprocessing Complete!")
 
 if __name__ == "__main__":

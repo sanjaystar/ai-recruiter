@@ -1,19 +1,85 @@
-team_name: "Your Team Name Here"
+# Redrob Hackathon — Submission Metadata
+# Mirrors the portal metadata (template: document/submission_metadata_template.yaml).
+
+# ============================================================================
+# Team identity
+# ============================================================================
+team_name: "Nova"                           # used in leaderboard/announcements
+
+primary_contact:
+  name: "Sanjay"
+  email: "sanjaystar75@gmail.com"
+  phone: "+91-7094270429"                   # TODO: fill before uploading
+
 team_members:
-  - name: "Member 1 Name"
-    email: "member1@example.com"
-  - name: "Member 2 Name"
-    email: "member2@example.com"
+  - name: "Sanjay"
+    email: "sanjaystar75@gmail.com"
+  - name: "Ananya"
+    email: "ananyamahalakshmi0@gmail.com"
 
-# Hardware the indexes were built on (for reproducibility context)
-build_environment:
-  os: "macOS / Linux / Windows"
+# ============================================================================
+# Code and reproducibility
+# ============================================================================
+github_repo: "https://github.com/sanjaystar/ai-recruiter"  # required, must be reachable
+sandbox_link: "N/A"                          # required (HF Spaces / Streamlit / Colab / Docker)
+
+# Single command that produces the submission CSV from the candidates file.
+# (Ranking step only; it loads the precomputed indexes and runs CPU-only / no network.)
+reproduce_command: "python main.py --candidates candidates.jsonl --jd job_description.txt --out Nova.csv"
+
+# ============================================================================
+# Compute environment
+# ============================================================================
+compute:
+  platform: "MacBook (Apple M5)"
+  cpu_cores: 10
   ram_gb: 16
-  cpu_cores: 8
+  python_version: "3.14.3"
+  os: "macOS 26.5.1"
+  uses_gpu_for_inference: false              # ranking is CPU-only
+  has_network_during_ranking: false          # forced offline via TRANSFORMERS_OFFLINE/HF_HUB_OFFLINE
+  pre_computation_required: true             # build_index.py builds sentence-transformer embeddings (downloads model once)
+  pre_computation_time_minutes: 10           # ~one-time; the ranking step itself is well under 5 min
 
-# Sandbox execution limits
-execution_constraints:
-  max_runtime_minutes: 5
-  max_ram_gb: 16
-  gpu_used: false
-  network_used_during_ranking: false
+# ============================================================================
+# AI tools declaration  (transparency only — not penalized)
+# ============================================================================
+ai_tools_used:
+  - "Claude"
+
+ai_usage_summary: |
+  Used Claude (Claude Code) to review the ranking pipeline against the spec and to
+  implement fixes: reviving the career-relevance signal, normalizing score
+  components, adding a second honeypot check and a negative-domain penalty,
+  correcting the tie-break to match the validator, and de-templating the reasoning.
+  No candidate data was sent to any hosted LLM; the ranking step makes no network calls.
+
+# ============================================================================
+# Approach summary
+# ============================================================================
+methodology_summary: |
+  Two-stage semantic ranker. Offline (build_index.py): all-MiniLM-L6-v2 dense
+  embeddings over each candidate's title, headline, summary, skills and job
+  descriptions, plus per-role career embeddings — no TF-IDF/BM25 sparse index;
+  relevance is purely semantic. Online (main.py): embed only the JD, then score all
+  100K candidates on five components — skill match (taxonomy + platform assessments),
+  semantic relevance (vectorized cosine similarity between the JD and each candidate's
+  dense profile embedding, leaning on meaning so non-buzzword fits still surface),
+  behavioral recruitability (the 23 Redrob signals), career fit (relevant tenure
+  detected by semantically matching the JD against per-role career embeddings, plus
+  progression and stability), and a trust/consistency score. Each component is min-max
+  normalized to 0-100 and combined with JD-derived weights. Honeypots (expert-with-
+  0-months and experience-exceeding-timeline) are forced out of the Top 100; candidates
+  whose specialty is a JD-rejected domain (CV/speech/robotics) with no retrieval skills
+  are penalized. Reasoning is generated deterministically from profile facts. Ranking
+  step runs CPU-only, offline, in well under 5 minutes.
+
+# ============================================================================
+# Declarations
+# ============================================================================
+declarations:
+  read_submission_spec: true
+  code_is_original_work: true
+  no_collusion: true
+  honeypot_check_done: true        # honeypots forced out of Top 100 in src/trust_score.py
+  reproduction_tested: true
