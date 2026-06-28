@@ -15,6 +15,7 @@ from sentence_transformers import SentenceTransformer
 
 from src.loader import stream_candidates
 from src.schema_analyzer import get_candidate_id
+from src.embed_io import load_embeddings, embeddings_exist
 from src.jd_parser import parse_jd
 from src.skill_score import calculate_skill_score, build_skill_matcher
 from src.career_score import calculate_career_score, build_career_anchors, role_relevance_from_embeddings
@@ -39,9 +40,10 @@ def main():
 
     start_time = time.time()
 
-    required_artifacts = ["embeddings.npy", "candidate_ids.json", "career_embeddings.npy",
-                          "career_role_counts.json", "models/all-MiniLM-L6-v2"]
-    if not all(os.path.exists(p) for p in required_artifacts):
+    required_files = ["candidate_ids.json", "career_role_counts.json", "models/all-MiniLM-L6-v2"]
+    required_embeds = ["embeddings.npy", "career_embeddings.npy"]
+    if not (all(os.path.exists(p) for p in required_files)
+            and all(embeddings_exist(p) for p in required_embeds)):
         print("Indexes not found. Run: python build_index.py")
         sys.exit(1)
 
@@ -54,10 +56,10 @@ def main():
     jd_text = get_jd_text(jd_path)
 
     # 1. Load artifacts
-    candidate_embeddings = np.load("embeddings.npy")
+    candidate_embeddings = load_embeddings("embeddings.npy")
     with open("candidate_ids.json", "r") as f:
         candidate_ids = json.load(f)
-    career_embeddings = np.load("career_embeddings.npy")
+    career_embeddings = load_embeddings("career_embeddings.npy")
     with open("career_role_counts.json", "r") as f:
         career_role_counts = json.load(f)
 

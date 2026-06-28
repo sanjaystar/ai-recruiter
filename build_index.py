@@ -7,6 +7,7 @@ from sentence_transformers import SentenceTransformer
 
 from src.loader import stream_candidates
 from src.schema_analyzer import get_candidate_id, safe_str, get_profile, get_skills, get_career_history
+from src.embed_io import save_embeddings
 
 def concat_candidate_text(candidate: dict) -> str:
     profile = get_profile(candidate)
@@ -94,13 +95,13 @@ def main():
 
     print("Building Dense Profile Embeddings (this may take 10-20 minutes)...")
     embeddings = model.encode(texts, batch_size=256, show_progress_bar=True, normalize_embeddings=True)
-    np.save(args.out_embed, embeddings)
-    print(f"Saved {args.out_embed}")
+    written = save_embeddings(embeddings, args.out_embed)
+    print(f"Saved {args.out_embed} ({len(written)} file(s), float16)")
 
     print("Building Per-Role Career Embeddings...")
     career_embeddings = model.encode(role_texts, batch_size=256, show_progress_bar=True, normalize_embeddings=True)
-    np.save(args.out_career, career_embeddings)
-    print(f"Saved {args.out_career}")
+    written = save_embeddings(career_embeddings, args.out_career)
+    print(f"Saved {args.out_career} ({len(written)} file(s), float16)")
     print("Offline Preprocessing Complete!")
 
 if __name__ == "__main__":

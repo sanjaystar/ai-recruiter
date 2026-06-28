@@ -16,8 +16,14 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Build the offline index
-Requires internet to download the `all-MiniLM-L6-v2` model (cached under `models/`); takes ~10–20 minutes on CPU. Writes the runtime artifacts to the repo root: `embeddings.npy`, `career_embeddings.npy`, `candidate_ids.json`, `career_role_counts.json`.
+### Build the offline index (optional — already committed)
+The precomputed indexes ship in the repo (float16, sharded under 100 MB so a plain
+`git clone` reproduces with no Git LFS): `embeddings.npy`,
+`career_embeddings.part*.npy`, `candidate_ids.json`, `career_role_counts.json`. The
+ranking step below loads these directly, so **reproduction does not run this step.**
+
+To rebuild from scratch (needs internet once to fetch `all-MiniLM-L6-v2` into
+`models/`; ~10–20 min on CPU):
 ```bash
 python build_index.py --candidates candidates.jsonl
 ```
