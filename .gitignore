@@ -12,3 +12,4 @@ __pycache__/
 *.log
 .claude/
 candidates.jsonl
+venv

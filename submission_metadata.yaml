@@ -14,14 +14,14 @@ primary_contact:
 team_members:
   - name: "Sanjay"
     email: "sanjaystar75@gmail.com"
-  - name: "Ananya"
+  - name: "Ananya H"
     email: "ananyamahalakshmi0@gmail.com"
 
 # ============================================================================
 # Code and reproducibility
 # ============================================================================
 github_repo: "https://github.com/sanjaystar/ai-recruiter"  # required, must be reachable
-sandbox_link: "N/A"                          # required (HF Spaces / Streamlit / Colab / Docker)
+sandbox_link: "https://huggingface.co/spaces/Ananyah25/ai-recruitment"                          # required (HF Spaces / Streamlit / Colab / Docker)
 
 # Single command that produces the submission CSV from the candidates file.
 # (Ranking step only; it loads the precomputed indexes and runs CPU-only / no network.)
